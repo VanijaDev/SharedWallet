@@ -5,11 +5,12 @@ contract('MyWallet', (accounts) => {
     const OWNER = accounts[0];
     const ACC_1 = accounts[1];
     const ACC_2 = accounts[2];
+    const InitialBalance = web3.toWei(1, 'ether');
 
     let wallet;
 
     afterEach('reset state', () => {
-        return MyWallet.new({value: 10})
+        return MyWallet.new({value: InitialBalance})
             .then(inst => wallet = inst);
     });
 
@@ -22,18 +23,20 @@ contract('MyWallet', (accounts) => {
         it('balance', () => {
             return Promise.resolve()
                 .then(() => web3.eth.getBalance(wallet.address))
-                .then(bal => assert.equal(bal.toNumber(), 10, 'initial balance must be 10'));
+                .then(bal => assert.equal(bal.toNumber(), InitialBalance, 'initial balance must be ' + InitialBalance));
         });
     });
 
     describe('spend money', () => {
+      let spendAmount = web3.toWei(0.5, 'ether');
+
         it('should spend if owner and create proposal if another account', () => {
             return Promise.resolve()
-                .then(() => wallet.spendMoneyOn.call(ACC_1, 5, "Send to Acc 1"))
+                .then(() => wallet.spendMoneyOn.call(ACC_1, spendAmount, "Send to Acc 1"))
                 .then(proposalId => {
                     assert.equal(proposalId.toNumber(), 0, "sent from owner, should be 0");
                 })
-                .then(() => wallet.spendMoneyOn.call(ACC_2, 5, "Send to Acc 2", {from: ACC_1}))
+                .then(() => wallet.spendMoneyOn.call(ACC_2, spendAmount, "Send to Acc 2", {from: ACC_1}))
                 .then(proposalId => {
                     assert.equal(proposalId.toNumber(), 1, "sent from ACC_1, should be 1");
                 });
@@ -41,47 +44,41 @@ contract('MyWallet', (accounts) => {
 
         it('should confirm proposal', () => {
             let proposalID;
+            let prevBalance;
+
             return Promise.resolve()
-            //  1
-                // .then(() => wallet.spendMoneyOn(ACC_2, 5, "Send to Acc 2", {from: ACC_1}))
-                // .then(tx => {
-                //     console.log("name: " + tx.logs[0].event)
-                //     console.log("from: " + tx.logs[0].args._from)
-                //     console.log("tp: " + tx.logs[0].args._to)
-                // })
-                // .then(() => wallet.confirmProposal(1))
-                // .then(tx => {
-                //     console.log("")
-                //     console.log("id: " + tx.logs[0].args._proposalId)
-                //     console.log("Log count: " + tx.logs.length)
-                    
-                //     // console.log("id: " + tx.logs[0].args._proposalId)
-                //     // console.log("name: " + tx.logs[0].event)
-                //     // console.log("from: " + tx.logs[0].args._from)
-                //     // console.log("to: " + tx.logs[0].args._to)
-                // })
-
-
-            //  2
-                // .then(() => wallet.spendMoneyOn.call(ACC_2, 5, "Send to Acc 2", {from: ACC_1}))
-                // .then(id => {
-                //     assert.equal(id.toNumber(), 1, "sent from ACC_1, should be 1");
-                //     proposalID = id;
-                // })
-                // .then(() => wallet.confirmProposal.call(proposalID))
-                // .then(res => assert.isTrue(res))
-
-            //  3
-                .then(() => wallet.spendMoneyOn.call(ACC_2, 5, "Send to Acc 2", {from: ACC_1}))
-                .then(id => {
-                    assert.equal(id.toNumber(), 1, "sent from ACC_1, should be 1");
-                    proposalID = id;
+              //  1. create proposal
+                .then(() => wallet.spendMoneyOn(ACC_2, spendAmount, "Send to Acc 2", {from: ACC_1}))
+                .then(tx => {
+                  assert.equal(tx.logs.length, 1, 'single event shuold be emitted on spendMoneyOn');
+                  
+                  let log = tx.logs[0];
+                  assert.equal(log.event, 'LogProposalReceived');
+                  proposalID = log.args._id.toNumber();
                 })
+              //  2. get previous balance
                 .then(() => web3.eth.getBalance(ACC_2))
-                .then(bal => prevBalance = bal.toNumber())
-                .then(() => wallet.confirmProposal(proposalID))
-                .then(() => web3.eth.getBalance(ACC_2))
-                .then(bal => assert.isAbove(bal.toNumber(), prevBalance, "balance should be increased."))
+                .then(bal => {
+                  console.log('prev: ' + bal.toNumber());
+                  prevBalance = bal.toNumber();
+                })
+              //  3. confirm proposal
+              // 3.1 - use .call() to simulate transaction. I get true, so everything is OK.
+                .then(() => wallet.confirmProposal.call(proposalID))
+                .then(res => assert.isTrue(res))
+              //  3.2 - send real transaction. There is no successfull event... How can it be? True if I simulate and no event here.
+              .then(() => wallet.confirmProposal(proposalID))
+              .then(tx => {
+                assert.equal(tx.logs.length, 1, 'single event shuold be emitted on confirmProposal');
+                assert.equal(tx.logs[0].event, 'LogProposalConfirmed', 'wrong event name');
+              })
+              //  4. verify balance
+               .then(() => web3.eth.getBalance(ACC_2))
+               .then(bal => {
+                 console.log('new: ' + bal.toNumber());
+                 assert.isTrue(bal.toNumber() - prevBalance == spendAmount, 'wrong new balance');
+               })
+                
         });
 
     });

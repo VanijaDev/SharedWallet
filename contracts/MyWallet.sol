@@ -39,9 +39,8 @@ contract MyWallet is mortal {
 
   //  events
   event LogReceivedFunds(address indexed _from, uint _amount);
-  event LogProposalReceived(address indexed _from, address indexed _to, string _reason);
-  event LogProposalConfirmReceived(uint _proposalId, address indexed _from, address indexed _to, string _reason);
-  event LogProposalConfirmReceivedAndPassed(uint _proposalId, address indexed _from, address indexed _to, string _reason);
+  event LogProposalReceived(uint indexed _id, address indexed _from, address indexed _to, string _reason);
+  event LogProposalConfirmed(address indexed _from, address indexed _to, string _reason);
 
   function MyWallet() payable public {
 
@@ -53,16 +52,14 @@ contract MyWallet is mortal {
     }
   }
 
-  function confirmProposal(uint _proposalId) public onlyOwner returns (bool s) {
+  function confirmProposal(uint _proposalId) public onlyOwner returns (bool) {
     Proposal storage proposal = proposals[_proposalId];
-    
-    LogProposalConfirmReceived(_proposalId, proposal.from, proposal.to, proposal.reason);
 
     if (proposal.from != address(0) && proposal.to != address(0)) {
       if (!proposal.sent) {
         proposal.sent = true;
         proposal.to.transfer(proposal.value);
-        LogProposalConfirmReceivedAndPassed(_proposalId, proposal.from, proposal.to, proposal.reason);
+        LogProposalConfirmed(proposal.from, proposal.to, proposal.reason);
 
         return true;
       }
@@ -77,7 +74,7 @@ contract MyWallet is mortal {
       proposals[proposalCounter] = Proposal(msg.sender, _to, _value, _reason, false);
       proposal_id = proposalCounter;
 
-      LogProposalReceived(proposals[proposalCounter].from, proposals[proposalCounter].to, proposals[proposalCounter].reason);
+      LogProposalReceived(proposalCounter, proposals[proposalCounter].from, proposals[proposalCounter].to, proposals[proposalCounter].reason);
     }
   }
 }
